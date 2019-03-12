@@ -45,15 +45,11 @@ def createCubeHeader(g):
     qb = rdflib.Namespace('http://purl.org/linked-data/cube#')
     sdmxAttribute = rdflib.Namespace('http://purl.org/linked-data/sdmx/2009/attribute#')
     sdmxDimension = rdflib.Namespace('http://purl.org/linked-data/sdmx/2009/dimension#')
-    dcat = rdflib.Namespace('http://www.w3.org/ns/dcat#')
-    dcterms = rdflib.Namespace('http://purl.org/dc/terms/')
-
 
     g.bind('qb', qb)
     g.bind('sdmx-attribute', sdmxAttribute)
     g.bind('sdmx-dimension', sdmxDimension)
-    g.bind('dcat', dcat)
-    g.bind('dcterms', dcterms)
+
 
     b1 = rdflib.BNode()
     b2  = rdflib.BNode()
@@ -80,12 +76,6 @@ def createCubeHeader(g):
         (ns.rate, RDF.type, qb.DataSet),
         (ns.rate, RDFS.label, Literal("Kurzy devizového trhu", lang="cs")),
         (ns.rate, qb.structure, ns.dsd),
-        (ns.rate, dcterms.title, Literal("Kurzy devizového trhu", lang="cs")),
-        (ns.rate, dcterms.description, Literal("Denní kurzy devizového trhu vyhlašované Českou národní bankou", lang="cs")),
-        (ns.rate, RDFS.comment, Literal("Denní kurzy devizového trhu vyhlašované Českou národní bankou", lang="cs")),
-        (ns.rate, dcterms.publisher, rdflib.URIRef("http://eghuro.cz/#me")),
-        (ns.rate, dcterms.source, rdflib.URIRef("http://www.cnb.cz/cs/financni_trhy/devizovy_trh/kurzy_devizoveho_trhu")),
-        (ns.rate, dcterms.rightsHolder, rdflib.URIRef("http://www.cnb.cz")),
 
         (ns.sliceByDate, RDF.type, qb.SliceKey),
         (ns.sliceByDate, RDFS.label, Literal("Denní kurzovní lístek", lang="cs")),
@@ -100,8 +90,11 @@ def triplifyRateList(rates, date, g):
     ns = rdflib.Namespace('http://data.eghuro.cz/resource/rates/')
     qb = rdflib.Namespace('http://purl.org/linked-data/cube#')
     sdmxDimension = rdflib.Namespace('http://purl.org/linked-data/sdmx/2009/dimension#')
-    cur = rdflib.Namespace('https://www.xe.com/currency/')
+    cur = rdflib.Namespace('http://data.eghuro.cz/resource/currency/')
     dat = rdflib.Namespace('http://reference.data.gov.uk/id/gregorian-day/')
+    skos = rdflib.Namespace('http://www.w3.org/2004/02/skos/core#')
+
+    g.bind('skos', skos)
 
     sliceIri = rdflib.URIRef('http://data.eghuro.cz/resource/rates/czk/'+date.strftime("%Y-%m-%d"))
     for p, o in [
@@ -111,7 +104,20 @@ def triplifyRateList(rates, date, g):
     ]:
         g.add((sliceIri, p, o))
 
+    cur_scheme = rdflib.URIRef('http://data.eghuro.cz/resource/currency')
+    for t in [
+        (cur_scheme, RDF.type, skos.ConceptScheme)
+    ]:
+        g.add(t)
+
     for currency in rates.keys():
+        for t in [
+            (cur[currency], RDF.type, skos.Concept),
+            (cur[currency], skos.notation, Literal(currency)),
+            (cur[currency], skos.inScheme, cur_scheme)
+        ]:
+            g.add(t)
+
         observationIri = rdflib.URIRef('http://data.eghuro.cz/resource/rates/czk/'+currency.lower()+'/'+date.strftime("%Y-%m-%d"))
         for p, o in [
             (RDF.type, qb.Observation),
@@ -136,24 +142,10 @@ def getRateGraph(dates):
     return g
 
 
-def getCompleteHistory():
-    import datetime
-    begin = datetime.strptime("1991-01-01", "%Y-%m-%d")
-    end = datetime.strptime("2018-12-31", '%Y-%m-%d')
-    step = datetime.timedelta(days=1)
-    list = []
-
-    now = begin
-    while now <= end:
-        list.append(now)
-        now += step
-
-    return getRateGraph(list)
-
 if __name__ == '__main__':
     from datetime import date
-    #g = rdflib.Graph()
-    #createCubeHeader(g)
-    #rates = loadRateList(date.today())
-    #triplifyRateList(rates, date.today(), g)
-    print(getCompleteHistory().serialize(format="turtle"))
+    g = rdflib.Graph()
+    createCubeHeader(g)
+    rates = loadRateList(date.today())
+    triplifyRateList(rates, date.today(), g)
+    g.serialize(format="turtle", destination="cnb.ttl")
